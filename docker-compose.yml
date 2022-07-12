@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+###> doctrine/doctrine-bundle ###
+  database:
+    image: mariadb
+    ports: [3306]
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: default
+###< doctrine/doctrine-bundle ###
+
