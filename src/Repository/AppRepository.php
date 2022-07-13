@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Repository;
 
 use App\Entity\App;
+use App\Exception\App\AppNotFoundException;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
-use Ramsey\Uuid\Rfc4122\UuidV4;
 use Ramsey\Uuid\Uuid;
 
 /**
@@ -25,7 +25,18 @@ final class AppRepository extends ServiceEntityRepository
         return Uuid::uuid4()->toString();
     }
 
-    public function save(App $app)
+    public function get(string $id): App
+    {
+        $app = $this->find($id);
+
+        if (null === $app) {
+            throw new AppNotFoundException();
+        }
+
+        return $app;
+    }
+
+    public function save(App $app): void
     {
         foreach ($app->getUsers() as $user) {
             $this->getEntityManager()->persist($user);

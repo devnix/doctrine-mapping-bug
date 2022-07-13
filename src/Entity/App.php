@@ -4,9 +4,15 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Exception\App\UsernameAlreadyExistsException;
+use App\Exception\App\UserNotRegisteredException;
 use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 
+/**
+ * Aggregate root
+ */
 #[ORM\Entity]
 final class App implements \JsonSerializable
 {
@@ -14,8 +20,11 @@ final class App implements \JsonSerializable
     #[ORM\Column(type: 'string')]
     private string $id;
 
-    #[ORM\OneToMany(mappedBy: 'app', targetEntity: User::class, orphanRemoval: true)]
-    private $users;
+    /**
+     * @var Collection<int, User>
+     */
+    #[ORM\OneToMany(mappedBy: 'app', targetEntity: User::class, cascade: ["persist", "remove", "merge"], orphanRemoval: true)]
+    private Collection $users;
 
     private function __construct(
         string $id,
@@ -36,11 +45,11 @@ final class App implements \JsonSerializable
     }
 
     /**
-     * @return User[]
+     * @return Collection<User>
      */
-    public function getUsers(): array
+    public function getUsers(): Collection
     {
-        return $this->users->toArray();
+        return $this->users;
     }
 
     public function getUserByUsername(string $username): User
@@ -54,88 +63,49 @@ final class App implements \JsonSerializable
         throw new UserNotRegisteredException();
     }
 
-    public function getUserByName(string $userName): User
-    {
-        foreach ($this->users as $user) {
-            if ($user->getAlias() === $userName && !$user->isDeleted()) {
-                return $user;
-            }
-        }
-
-        throw new UserNotRegisteredException();
-    }
-
     public function createUser(string $userName, string $userNick, string $userPassword): void
     {
         try {
             $this->getUserByUsername($userNick);
         } catch (UserNotRegisteredException $e) {
-            try {
-                $this->getUserByName($userName);
-            } catch (UserNotRegisteredException $e) {
-                $user = User::create(
-                    $this,
-                    $userName,
-                    $userNick,
-                    $userPassword
-                );
-
-                $this->users[] = $user;
-
-                // $this->recordDomainEvent(BibAppUserCreated::fromBibAppUser($user);
-
-                return;
-            }
-
-            throw new UserNameAlreadyExistsException();
+            $user = User::create(
+                $this,
+                $userName,
+                $userNick,
+                $userPassword
+            );
+            $this->users->add($user);
+            return;
         }
-
-        throw new UserNickAlreadyExistsException();
+        throw new UsernameAlreadyExistsException();
     }
 
-    public function updateUserName(string $userNick, string $newUserName): self
+    public function updateUserAlias(string $username, string $newUserAlias): self
     {
-        $user = $this->getUserByUsername($userNick);
-
-        $newUser = $user->updateAlias($newUserName);
-
+        $user = $this->getUserByUsername($username);
+        $newUser = $user->updateAlias($newUserAlias);
         $this->users->set((int) $this->users->indexOf($user), $newUser);
-
-//        foreach ($newUser->pullDomainEvents() as $domainEvent) {
-//            $this->recordDomainEvent($domainEvent);
-//        }
-
         return $this;
     }
 
-    public function updateUserNick(string $userNick, string $newUserNick): self
+    public function updateUserUsername(string $username, string $newUsername): self
     {
-        $user = $this->getUserByUsername($userNick);
-
-        $newUser = $user->updateUsername($newUserNick);
-
-        $this->users->set((int) $this->users->indexOf($user), $newUser);
-
-//        TODO
-//        foreach ($newUser->pullDomainEvents() as $domainEvent) {
-//            $this->recordDomainEvent($domainEvent);
-//        }
-
-        return $this;
+        $user = $this->getUserByUsername($username);
+        try {
+            $this->getUserByUsername($newUsername);
+        } catch (UserNotRegisteredException) {
+            $newUser = $user->updateUsername($newUsername);
+            $this->users->set((int) $this->users->indexOf($user), $newUser);
+            return $this;
+        }
+        throw new UsernameAlreadyExistsException();
     }
 
     public function updateUserPassword(string $userNick, string $newUserPassword): self
     {
         $user = $this->getUserByUsername($userNick);
-
         $newUser = $user->updatePassword($newUserPassword);
-
         $this->users->set((int) $this->users->indexOf($user), $newUser);
-
-//        foreach ($newUser->pullDomainEvents() as $domainEvent) {
-//            $this->recordDomainEvent($domainEvent);
-//        }
-
         return $this;
     }
 
@@ -147,13 +117,14 @@ final class App implements \JsonSerializable
             return false;
         }
 
-        if ($userPassword === $user->getPassword()) {
-            // $this->recordDomainEvent(BibAppUserLogged::fromBibAppUser($user);
-            return true;
-        }
+        return $userPassword === $user->getPassword();
+    }
 
-        // $this->recordDomainEvent(BibAppUserLoginFailed::fromBibAppUser($user);
-        return false;
+    public function removeUser(string $username): self
+    {
+        $user = $this->getUserByUsername($username);
+        $this->users->removeElement($user);
+        return $this;
     }
 
     public function jsonSerialize(): mixed
@@ -162,19 +133,5 @@ final class App implements \JsonSerializable
             'id' => $this->id,
             'users' => $this->users->toArray()
         ];
-    }
-
-    public function removeUser(string $username): self
-    {
-        $user = $this->getUserByUsername($username);
-
-        if ($this->users->removeElement($user)) {
-            // set the owning side to null (unless already changed)
-            if ($user->getApp() === $this) {
-//                $user->setApp(null);
-            }
-        }
-
-        return $this;
     }
 }

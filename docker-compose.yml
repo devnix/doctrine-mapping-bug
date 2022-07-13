@@ -10,3 +10,12 @@ services:
       MYSQL_DATABASE: default
 ###< doctrine/doctrine-bundle ###
 
+  phpunit:
+    build: docker/php-cli
+    working_dir: /app
+    tty: true
+    volumes:
+      - ./:/app
+    environment:
+      APP_ENV: "test"
+      DATABASE_URL: "mysql://root:root@database:3306/default?charset=utf8mb4"

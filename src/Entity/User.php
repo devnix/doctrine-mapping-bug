@@ -6,9 +6,14 @@ namespace App\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
 
+/**
+ * Entity of the aggregate App
+ */
 #[ORM\Entity]
 final class User implements \JsonSerializable
 {
+    private const IMMUTABLE_CLASS = false;
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column(type: 'integer')]
@@ -50,11 +55,6 @@ final class User implements \JsonSerializable
         return new self($app, $alias, $username, $password);
     }
 
-    public function getApp(): App
-    {
-        return $this->app;
-    }
-
     public function getAlias(): string
     {
         return $this->alias;
@@ -72,37 +72,37 @@ final class User implements \JsonSerializable
 
     public function updateAlias(string $alias): self
     {
+        $user = $this->duplicate();
+
         if ($this->alias === $alias) {
             return $this;
         }
 
-        $this->alias = $alias;
+        $user->alias = $alias;
 
         // $this-->recordDomainEvent(...);
-        return $this;
+        return $user;
     }
 
     public function updateUsername(string $username): self
     {
+        $user = $this->duplicate();
         if ($this->username === $username) {
-            return $this;
+            return $user;
         }
-
-        $this->username = $username;
-
-        return $this;
+        $user->username = $username;
+        return $user;
     }
 
     public function updatePassword(string $password): self
     {
+        $user = $this->duplicate();
         if ($this->password === $password) {
-            return $this;
+            return $user;
         }
-
-        $this->password = $password;
-        return $this;
+        $user->password = $password;
+        return $user;
     }
-
 
     public function isDeleted(): bool
     {
@@ -111,6 +111,21 @@ final class User implements \JsonSerializable
 
     private function duplicate(): User
     {
+        /** @phpstan-ignore-next-line */
+        if (self::IMMUTABLE_CLASS) {
+            $newUser = new self(
+                $this->app,
+                $this->alias,
+                $this->username,
+                $this->password
+            );
+
+            $newUser->id = $this->id;
+
+            return $newUser;
+        }
+
+        /** @phpstan-ignore-next-line */
         return $this;
     }
 
